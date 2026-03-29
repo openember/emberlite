@@ -1,2 +1,26 @@
-# emberlite
-EmberLite: A lightweight application framework tailored for Embedded Linux, optimizing resources with a minimal core for efficient development.
+# EmberLite
+EmberLite 是一个专为嵌入式 Linux 打造的轻量级应用框架，它拥有精简的架构设计，让你可以聚焦核心业务，为你的智能设备快速构建高性能应用。
+
+
+
+## 概述
+
+EmberLite 是一个纯 C 语言实现轻量级嵌入式软件框架，支持多节点设计，节点间通过“发布-订阅”方式进行消息传递，这有点类似于 ROS2。但我们的目标不是为了替代 ROS2，而是希望在轻量的智能设备中，加快嵌入式 Linux 软件的开发。
+
+在嵌入式领域，C++ 和 Python 虽然功能强大，但往往伴随着运行时开销（Runtime Overhead）、复杂的依赖链和不可预测的内存占用。例如，在工业控制或航空航天领域，C++ 的动态内存分配和虚函数表查找有时被视为“不可控因素”。纯 C 的静态内存管理和直接函数调用能提供更高的确定性，更容易通过 MISRA C 等安全标准认证。这是我们在 OpenEmber 项目之外再打造一个纯 C 的 EmberLite 项目的原因。
+
+
+
+## 应用场景
+
+- 智能设备
+- 机器人
+- 3D打印机
+- 无人机
+- 咖啡机
+
+
+
+## License
+
+EmberLite 使用 Apache 2.0 许可证，代码完全公开，允许免费商用。
