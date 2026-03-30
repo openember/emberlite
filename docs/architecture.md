@@ -1,6 +1,677 @@
-# EmberLite 架构设计规范
+# EmberLite 架构设计规范（v0.1.0）
 
-版本：v0.0.1
+
+
+## 项目定位
+
+EmberLite 是一个面向嵌入式 Linux 类设备的轻量级纯 C runtime 框架，是 OpenEmber 的轻量级同系列产品，目标应用场景包括：
+
+- 机器人系统
+- 工业设备
+- 科学仪器
+- 边缘计算设备
+- IoT 网关
+
+核心设计目标：
+
+- 纯 C runtime 核心实现
+- 行为可预测（deterministic behavior）
+- 依赖极少
+- 强模块化结构
+- 支持跨进程与跨主机通信
+- 面向 10 年以上生命周期的长期可维护性
+
+非目标（v0.1 阶段）：
+
+- 不以 MISRA 合规为目标
+- 不支持裸机 MCU 平台
+- 不实现 DDS 级 QoS 抽象体系
+- 不设计通用 transport 抽象层
+
+
+
+## 系统总体架构
+
+EmberLite 采用分层 runtime 架构：
+
+```bash
+应用层
+   ↓
+Node Runtime
+   ↓
+Executor 调度层
+   ↓
+消息层
+   ↓
+通信传输层
+   ↓
+操作系统（Linux / POSIX）
+```
+
+核心设计原则：
+
+```bash
+数据面（Data Plane）   → LCM
+控制面（Control Plane） → NNG
+```
+
+该结构提供：
+
+- 高效数据流通信能力
+- RPC 控制能力
+- 自动发现能力
+- 强调试支持能力
+- 极低系统复杂度
+
+
+
+## 核心 Runtime 组件
+
+### ember_node
+
+Node 是 EmberLite 的基本执行单元。
+
+职责包括：
+
+- 注册 subscription
+- 注册 publisher
+- 注册 timer
+- 注册 RPC endpoint
+- 绑定 executor
+
+生命周期示例：
+
+```c
+node_create()
+node_init()
+node_spin()
+node_destroy()
+```
+
+注意：Node 不是进程（process），一个进程可以包含多个 node。
+
+设计约束：node 必须保持轻量。
+
+node 的本质是逻辑容器，而不是运行时实体。
+
+
+
+## Executor（核心调度引擎）
+
+Executor 负责调度所有回调执行。
+
+管理对象包括：
+
+- subscription callbacks
+- timer callbacks
+- RPC callbacks
+- 内部 runtime 事件
+
+支持的 executor 模型：
+
+### 单线程 executor（默认模式）
+
+```c
+while (running)
+    poll_events()
+    dispatch_callbacks()
+```
+
+适用目标：
+
+- 嵌入式 Linux
+- 控制系统
+- 实时性敏感系统
+
+优势：
+
+- 行为可预测
+- 无锁或低锁设计
+- 易调试
+
+### 线程池 executor（可选模式）
+
+主线程负责事件轮询，工作线程负责执行回调。
+
+适用目标：
+
+- 边缘计算设备
+- 高吞吐机器人系统
+
+### 实时 executor（未来扩展）
+
+计划支持：
+
+- SCHED_FIFO
+- CPU 亲和性绑定
+- 优先级调度队列
+
+
+
+## 消息通信架构
+
+### 通信模型概览
+
+EmberLite 采用双通信平面模型：
+
+```bash
+数据流通信 → LCM
+控制通信 / RPC → NNG
+```
+
+优势：
+
+- 避免 transport 抽象反模式
+- 保持性能最优
+- 降低系统复杂度
+- 最大化工具链兼容性
+
+
+
+## 数据通信层（LCM 集成）
+
+LCM 是 EmberLite 的主 publish-subscribe 通信骨架。
+
+职责包括：
+
+- topic 通信
+- multicast 传输
+- 消息序列化
+- 自动发现
+- 日志记录
+- 回放支持
+- 消息可视化支持
+
+使用组件包括：
+
+```bash
+liblcm
+lcm-gen
+```
+
+目标设备 runtime 不需要：
+
+```bash
+Java 工具链
+Python bindings
+C++ bindings
+```
+
+
+
+### LCM IDL 使用规范
+
+消息定义目录结构：
+
+```bash
+msg/
+ ├── imu.lcm
+ ├── odom.lcm
+ └── motor_cmd.lcm
+```
+
+生成代码：
+
+```bash
+imu.h
+imu.c
+```
+
+自动生成接口包括：
+
+```c
+encode()
+decode()
+publish()
+subscribe()
+```
+
+
+
+### LCM 传输优势
+
+LCM 提供：
+
+- 自动 discovery
+- multicast 通信
+- 跨进程通信
+- 跨主机通信
+- 日志记录能力
+- 回放能力
+
+无需实现以下模块：
+
+```
+discovery 协议
+serialization 层
+topic registry
+```
+
+
+
+## 控制通信层（NNG 集成）
+
+NNG 提供 RPC 能力与控制通信能力。
+
+支持模式包括：
+
+```
+REQ/REP
+SURVEYOR/RESPONDENT
+PAIR
+```
+
+主要应用场景：
+
+- 参数服务
+- 设备配置
+- 诊断查询
+- 服务调用
+- 远程管理
+
+NNG 是 LCM 的补充，而不是替代。
+
+### RPC 通信模型示例
+
+请求流程：
+
+```
+client → request
+server → response
+```
+
+典型接口：
+
+```c
+get_param()
+set_param()
+query_status()
+```
+
+
+
+## 定时器子系统
+
+Timer 提供周期性调度能力。
+
+支持模式：
+
+- 周期定时器
+- 单次定时器
+
+通过 executor 集成调度：
+
+```c
+executor_add_timer()
+```
+
+目标精度：< 1ms jitter（建议 RT Linux）
+
+
+
+## 参数服务系统
+
+参数服务基于 NNG RPC 实现。
+
+支持接口：
+
+```
+get
+set
+list
+subscribe
+```
+
+示例接口：
+
+```c
+param_get("robot.speed")
+param_set("robot.speed", value)
+```
+
+
+
+## Launch 启动系统
+
+Launch 负责多节点启动编排。
+
+职责包括：
+
+- 进程启动管理
+- node 配置注入
+- 参数加载
+- 命名空间管理
+
+未来支持格式：
+
+- XML
+- YAML
+- Lua
+
+v0.1 目标：YAML
+
+
+
+## 日志与回放支持
+
+通过 LCM 原生工具提供：
+
+```
+lcm-logger
+lcm-logplayer
+```
+
+优势：无需自研日志系统
+
+支持能力：
+
+- 离线调试
+- 仿真测试
+- 回归测试
+
+
+
+## Discovery 机制设计
+
+LCM 提供自动 multicast discovery。
+
+NNG discovery 策略：显式 endpoint 配置
+
+未来可选扩展：UDP broadcast discovery helper
+
+v0.1 暂不强制实现。
+
+
+
+## 第三方依赖管理模型
+
+EmberLite 支持三种依赖管理模式：
+
+### FETCH 模式
+
+行为逻辑：
+
+- 优先使用 third_party/
+- 否则 FetchContent 自动下载
+- 解压至 build/_deps/
+
+适用用户：
+
+- 开源开发者
+- 快速原型验证
+
+### VENDOR 模式
+
+行为逻辑：
+
+- 使用 third_party/ 本地归档
+- 或 *_LOCAL_SOURCE 指定源码路径
+
+适用用户：
+
+- 离线环境
+- 受监管环境
+- 可复现构建环境
+
+### SYSTEM 模式
+
+行为逻辑：
+
+- 使用系统安装包
+- find_package()
+
+失败行为：
+
+- 配置阶段报错
+
+适用用户：
+
+- Yocto
+- 企业 Linux
+- CI/CD 环境
+
+
+
+## 第三方依赖策略
+
+必须依赖：
+
+- LCM
+- NNG
+
+可选依赖：
+
+- YAML parser
+- HTTP client
+- MQTT client
+
+强约束原则：runtime 必须保持纯 C
+
+禁止依赖：
+
+- Boost
+- DDS runtime
+- CORBA
+- JVM runtime
+
+
+
+## Runtime 推荐目录结构
+
+推荐结构如下：
+
+```bash
+emberlite/
+ ├── runtime/
+ ├── executor/
+ ├── messaging/
+ │    ├── topic_bus/
+ │    └── rpc_bus/
+ ├── timer/
+ ├── param/
+ ├── launch/
+ └── third_party/
+      ├── lcm/
+      └── nng/
+```
+
+
+
+## Transport 抽象策略（重要设计约束）
+
+EmberLite 明确禁止设计通用 transport 抽象层。
+
+禁止结构：
+
+```
+transport = LCM | NNG | DDS | ZeroMQ
+```
+
+原因：
+
+- discovery 模型不同
+- QoS 模型不同
+- 线程模型不同
+
+推荐结构：
+
+```
+LCM = topic bus
+NNG = RPC bus
+```
+
+职责明确划分。
+
+
+
+## 并发模型设计
+
+Executor 负责统一并发调度。
+
+支持模式：
+
+- 单线程模式
+- 多线程模式
+- 实时模式（未来）
+
+不推荐应用层自行创建线程。
+
+推荐模式：**统一由 executor 管理调度**
+
+
+
+## IPC 通信策略
+
+LCM 支持：
+
+- UDP multicast
+
+NNG 支持：
+
+- IPC sockets
+- TCP
+- inproc
+
+推荐使用策略：
+
+- 同进程 → inproc
+- 同主机 → IPC
+- 跨主机 → TCP
+
+
+
+## 跨主机通信能力
+
+支持方式：
+
+- LCM multicast
+- NNG TCP
+
+无需中心 broker。
+
+无中心架构优势：
+
+- 高鲁棒性
+- 高扩展性
+- 高容错能力
+
+
+
+## 调试工具体系
+
+LCM 工具链支持工具包括：
+
+- lcm-spy
+- lcm-logger
+- lcm-logplayer
+
+支持能力：
+
+- 消息结构查看
+- 频率监控
+- 数据解析
+
+三者构成了 runtime observability system，类似于 Wireshark + rosbag + rosbag play
+
+| 工具          | 类型          | 作用                |
+| ------------- | ------------- | ------------------- |
+| lcm-spy       | 调试 GUI 工具 | 实时查看 topic 数据 |
+| lcm-logger    | 数据录制进程  | 记录消息流          |
+| lcm-logplayer | 数据回放进程  | 重放消息流          |
+
+lcm-logger 是一个独立进程，它会订阅所有 topic，然后写入 .lcm log 文件。结构类似 rosbag，记录 timestamp、channel、payload 等信息。
+
+
+
+## 未来扩展模块规划
+
+可选扩展模块包括：
+
+- DDS bridge
+- ROS2 bridge
+- MQTT gateway
+- HTTP control server
+- Web dashboard integration
+
+扩展原则：核心 runtime 始终保持纯 C
+
+
+
+## 长期稳定性设计策略
+
+核心保障策略：
+
+- 稳定 C ABI
+- 极小依赖集合
+- 模块化扩展能力
+- 通信职责清晰划分
+
+生命周期目标：10 年以上可维护性
+
+
+
+## 最终架构模型总结
+
+EmberLite runtime 总体结构：
+
+```bash
+Application
+   ↓
+  Node
+   ↓
+Executor
+   ↓
+LCM topic bus
+NNG RPC bus
+   ↓
+POSIX runtime
+```
+
+核心设计优先级：
+
+1. 简单性
+2. 可预测性
+3. 可移植性
+4. 可观测性
+5. 可维护性
+
+
+
+## EmberLite runtime C API 设计
+
+包含：
+
+① Node API
+
+例如：
+
+```c
+ember_node_create()
+ember_node_destroy()
+ember_node_spin()
+```
+
+② Executor API
+
+例如：
+
+```c
+ember_executor_create()
+ember_executor_add_node()
+ember_executor_spin()
+```
+
+③ Parameter API
+
+例如：
+
+```c
+ember_param_declare()
+ember_param_get()
+ember_param_set()
+```
+
+目标：形成 `include/emberlite/*.h` 级别规范接口设计。
 
 
 
