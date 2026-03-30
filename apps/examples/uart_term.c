@@ -185,7 +185,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    fprintf(stderr, "Connected to %s @ %u. Exit with Ctrl-A then Ctrl-X.\n", cfg.path, cfg.baudrate);
+    /* Use CRLF to avoid depending on the user's stdout/stderr ONLCR setting. */
+    fprintf(stderr, "Connected to %s @ %u. Exit with Ctrl-A then Ctrl-X.\r\n", cfg.path, cfg.baudrate);
 
     const int uart_fd = hal_uart_get_fd(uart);
     if (uart_fd < 0) {
@@ -199,6 +200,7 @@ int main(int argc, char** argv)
     uint8_t tx[256];
     int saw_ctrl_a = 0;
     int last_rx_was_cr = 0;
+    size_t local_col = 0;
 
     while (!g_stop) {
         struct pollfd pfds[2];
@@ -286,11 +288,30 @@ int main(int argc, char** argv)
                         break;
                     }
                     (void)write(STDOUT_FILENO, seq, sizeof(seq));
+                    local_col += sizeof(seq);
                     continue;
                 }
 
                 if (c == 0x01) { /* Ctrl-A */
                     saw_ctrl_a = 1;
+                    continue;
+                }
+
+                if (c == 0x7f || c == 0x08) { /* Backspace / DEL */
+                    if (local_col > 0) {
+                        const uint8_t bs_seq[3] = {'\b', ' ', '\b'};
+                        (void)write(STDOUT_FILENO, bs_seq, sizeof(bs_seq));
+                        local_col--;
+                        /* Forward DEL by default; many devices expect 0x7f. */
+                        uint8_t del = 0x7f;
+                        size_t wn = 0;
+                        st = hal_uart_write(uart, &del, 1, 1000, &wn);
+                        if (st != HAL_OK) {
+                            fprintf(stderr, "\nUART write error: %s\n", hal_status_str(st));
+                            g_stop = 1;
+                            break;
+                        }
+                    }
                     continue;
                 }
 
@@ -304,6 +325,7 @@ int main(int argc, char** argv)
                         break;
                     }
                     (void)write(STDOUT_FILENO, crlf, sizeof(crlf));
+                    local_col = 0;
                 } else {
                     size_t wn = 0;
                     st = hal_uart_write(uart, &c, 1, 1000, &wn);
@@ -313,6 +335,7 @@ int main(int argc, char** argv)
                         break;
                     }
                     (void)write(STDOUT_FILENO, &c, 1);
+                    local_col++;
                 }
             }
         }
