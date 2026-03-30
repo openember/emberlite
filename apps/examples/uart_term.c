@@ -67,9 +67,9 @@ static void stdin_restore(term_guard_t* g)
 static void usage(const char* argv0)
 {
     fprintf(stderr,
-            "Usage: %s -d <device> [-b <baud>] [--databits N] [--stopbits N] [--parity none|odd|even] [--flow none|hw|sw]\\n"
-            "Example: %s -d /dev/ttyUSB0 -b 115200\\n"
-            "Exit: Ctrl-A then Ctrl-X\\n",
+            "Usage: %s -d <device> [-b <baud>] [--databits N] [--stopbits N] [--parity none|odd|even] [--flow none|hw|sw]\n"
+            "Example: %s -d /dev/ttyUSB0 -b 115200\n"
+            "Exit: Ctrl-A then Ctrl-X\n",
             argv0,
             argv0);
 }
@@ -113,21 +113,21 @@ int main(int argc, char** argv)
         } else if (!strcmp(a, "-b") && i + 1 < argc) {
             uint32_t v;
             if (parse_u32(argv[++i], &v) != 0) {
-                fprintf(stderr, "Invalid baudrate\\n");
+                fprintf(stderr, "Invalid baudrate\n");
                 return 2;
             }
             cfg.baudrate = v;
         } else if (!strcmp(a, "--databits") && i + 1 < argc) {
             uint32_t v;
             if (parse_u32(argv[++i], &v) != 0 || (v < 5 || v > 8)) {
-                fprintf(stderr, "Invalid databits (5..8)\\n");
+                fprintf(stderr, "Invalid databits (5..8)\n");
                 return 2;
             }
             cfg.data_bits = (uint8_t)v;
         } else if (!strcmp(a, "--stopbits") && i + 1 < argc) {
             uint32_t v;
             if (parse_u32(argv[++i], &v) != 0 || (v != 1 && v != 2)) {
-                fprintf(stderr, "Invalid stopbits (1|2)\\n");
+                fprintf(stderr, "Invalid stopbits (1|2)\n");
                 return 2;
             }
             cfg.stop_bits = (uint8_t)v;
@@ -140,7 +140,7 @@ int main(int argc, char** argv)
             } else if (!strcmp(p, "even")) {
                 cfg.parity = 2;
             } else {
-                fprintf(stderr, "Invalid parity (none|odd|even)\\n");
+                fprintf(stderr, "Invalid parity (none|odd|even)\n");
                 return 2;
             }
         } else if (!strcmp(a, "--flow") && i + 1 < argc) {
@@ -152,11 +152,11 @@ int main(int argc, char** argv)
             } else if (!strcmp(f, "sw")) {
                 cfg.flow_control = 2;
             } else {
-                fprintf(stderr, "Invalid flow (none|hw|sw)\\n");
+                fprintf(stderr, "Invalid flow (none|hw|sw)\n");
                 return 2;
             }
         } else {
-            fprintf(stderr, "Unknown arg: %s\\n", a);
+            fprintf(stderr, "Unknown arg: %s\n", a);
             usage(argv[0]);
             return 2;
         }
@@ -173,23 +173,23 @@ int main(int argc, char** argv)
     hal_uart_handle_t uart = NULL;
     hal_status_t st = hal_uart_open(&cfg, &uart);
     if (st != HAL_OK) {
-        fprintf(stderr, "hal_uart_open(%s) failed: %s\\n", cfg.path, hal_status_str(st));
+        fprintf(stderr, "hal_uart_open(%s) failed: %s\n", cfg.path, hal_status_str(st));
         return 1;
     }
 
     term_guard_t tg;
     memset(&tg, 0, sizeof(tg));
     if (stdin_set_raw(&tg) != 0) {
-        fprintf(stderr, "Failed to set stdin raw mode\\n");
+        fprintf(stderr, "Failed to set stdin raw mode\n");
         (void)hal_uart_close(uart);
         return 1;
     }
 
-    fprintf(stderr, "Connected to %s @ %u. Exit with Ctrl-A then Ctrl-X.\\n", cfg.path, cfg.baudrate);
+    fprintf(stderr, "Connected to %s @ %u. Exit with Ctrl-A then Ctrl-X.\n", cfg.path, cfg.baudrate);
 
     const int uart_fd = hal_uart_get_fd(uart);
     if (uart_fd < 0) {
-        fprintf(stderr, "hal_uart_get_fd failed\\n");
+        fprintf(stderr, "hal_uart_get_fd failed\n");
         stdin_restore(&tg);
         (void)hal_uart_close(uart);
         return 1;
@@ -198,6 +198,7 @@ int main(int argc, char** argv)
     uint8_t rx[1024];
     uint8_t tx[256];
     int saw_ctrl_a = 0;
+    int last_rx_was_cr = 0;
 
     while (!g_stop) {
         struct pollfd pfds[2];
@@ -212,7 +213,7 @@ int main(int argc, char** argv)
             if (errno == EINTR) {
                 continue;
             }
-            fprintf(stderr, "poll() failed\\n");
+            fprintf(stderr, "poll() failed\n");
             break;
         }
 
@@ -220,11 +221,36 @@ int main(int argc, char** argv)
             size_t n = 0;
             st = hal_uart_read(uart, rx, sizeof(rx), 0, &n);
             if (st != HAL_OK) {
-                fprintf(stderr, "\\nUART read error: %s\\n", hal_status_str(st));
+                fprintf(stderr, "\nUART read error: %s\n", hal_status_str(st));
                 break;
             }
             if (n > 0) {
-                (void)write(STDOUT_FILENO, rx, n);
+                /*
+                 * Normalize incoming line endings for the local terminal:
+                 * if the device sends LF only, map to CRLF so the cursor
+                 * returns to column 0 (typical serial terminal behavior).
+                 */
+                uint8_t out[2048];
+                size_t out_n = 0;
+                for (size_t i = 0; i < n; i++) {
+                    uint8_t c = rx[i];
+                    if (c == '\n' && !last_rx_was_cr) {
+                        if (out_n + 2 <= sizeof(out)) {
+                            out[out_n++] = '\r';
+                            out[out_n++] = '\n';
+                        }
+                        last_rx_was_cr = 0;
+                        continue;
+                    }
+
+                    if (out_n + 1 <= sizeof(out)) {
+                        out[out_n++] = c;
+                    }
+                    last_rx_was_cr = (c == '\r') ? 1 : 0;
+                }
+                if (out_n > 0) {
+                    (void)write(STDOUT_FILENO, out, out_n);
+                }
             }
         }
 
@@ -234,7 +260,7 @@ int main(int argc, char** argv)
                 if (errno == EINTR) {
                     continue;
                 }
-                fprintf(stderr, "\\nstdin read error\\n");
+                fprintf(stderr, "\nstdin read error\n");
                 break;
             }
             if (r == 0) {
@@ -255,7 +281,7 @@ int main(int argc, char** argv)
                     size_t wn = 0;
                     st = hal_uart_write(uart, seq, sizeof(seq), 1000, &wn);
                     if (st != HAL_OK) {
-                        fprintf(stderr, "\\nUART write error: %s\\n", hal_status_str(st));
+                        fprintf(stderr, "\nUART write error: %s\n", hal_status_str(st));
                         g_stop = 1;
                         break;
                     }
@@ -267,12 +293,23 @@ int main(int argc, char** argv)
                     continue;
                 }
 
-                size_t wn = 0;
-                st = hal_uart_write(uart, &c, 1, 1000, &wn);
-                if (st != HAL_OK) {
-                    fprintf(stderr, "\\nUART write error: %s\\n", hal_status_str(st));
-                    g_stop = 1;
-                    break;
+                if (c == '\r' || c == '\n') {
+                    const uint8_t crlf[2] = {'\r', '\n'};
+                    size_t wn = 0;
+                    st = hal_uart_write(uart, crlf, sizeof(crlf), 1000, &wn);
+                    if (st != HAL_OK) {
+                        fprintf(stderr, "\nUART write error: %s\n", hal_status_str(st));
+                        g_stop = 1;
+                        break;
+                    }
+                } else {
+                    size_t wn = 0;
+                    st = hal_uart_write(uart, &c, 1, 1000, &wn);
+                    if (st != HAL_OK) {
+                        fprintf(stderr, "\nUART write error: %s\n", hal_status_str(st));
+                        g_stop = 1;
+                        break;
+                    }
                 }
             }
         }
@@ -280,7 +317,7 @@ int main(int argc, char** argv)
 
     stdin_restore(&tg);
     (void)hal_uart_close(uart);
-    fprintf(stderr, "\\nBye.\\n");
+    fprintf(stderr, "\nBye.\n");
     return 0;
 }
 
