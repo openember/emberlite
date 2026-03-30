@@ -285,6 +285,7 @@ int main(int argc, char** argv)
                         g_stop = 1;
                         break;
                     }
+                    (void)write(STDOUT_FILENO, seq, sizeof(seq));
                     continue;
                 }
 
@@ -302,6 +303,7 @@ int main(int argc, char** argv)
                         g_stop = 1;
                         break;
                     }
+                    (void)write(STDOUT_FILENO, crlf, sizeof(crlf));
                 } else {
                     size_t wn = 0;
                     st = hal_uart_write(uart, &c, 1, 1000, &wn);
@@ -310,6 +312,7 @@ int main(int argc, char** argv)
                         g_stop = 1;
                         break;
                     }
+                    (void)write(STDOUT_FILENO, &c, 1);
                 }
             }
         }
