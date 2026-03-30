@@ -19,6 +19,7 @@ struct hal_i2c_handle_impl {
     pthread_mutex_t mu;
 };
 
+#ifndef O_CLOEXEC
 static int set_cloexec(int fd)
 {
     int flags = fcntl(fd, F_GETFD);
@@ -30,6 +31,7 @@ static int set_cloexec(int fd)
     }
     return 0;
 }
+#endif
 
 static hal_status_t set_slave(int fd, uint16_t addr)
 {

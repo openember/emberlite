@@ -19,6 +19,7 @@ struct hal_spi_handle_impl {
     pthread_mutex_t mu;
 };
 
+#ifndef O_CLOEXEC
 static int set_cloexec(int fd)
 {
     int flags = fcntl(fd, F_GETFD);
@@ -30,6 +31,7 @@ static int set_cloexec(int fd)
     }
     return 0;
 }
+#endif
 
 hal_status_t hal_spi_open(const hal_spi_config_t* config, hal_spi_handle_t* out_handle)
 {

@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifndef O_CLOEXEC
 static int set_cloexec(int fd)
 {
     int flags = fcntl(fd, F_GETFD);
@@ -23,6 +24,7 @@ static int set_cloexec(int fd)
     }
     return 0;
 }
+#endif
 
 struct hal_gpio_handle_impl {
     uint32_t pin;

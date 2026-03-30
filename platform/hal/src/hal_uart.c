@@ -21,6 +21,7 @@ struct hal_uart_handle_impl {
     pthread_mutex_t mu;
 };
 
+#ifndef O_CLOEXEC
 static int hal_uart_set_cloexec(int fd)
 {
     int flags = fcntl(fd, F_GETFD);
@@ -32,6 +33,7 @@ static int hal_uart_set_cloexec(int fd)
     }
     return 0;
 }
+#endif
 
 static speed_t hal_uart_baud_to_speed(uint32_t baud)
 {
