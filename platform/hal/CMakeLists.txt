@@ -8,6 +8,7 @@ add_library(emberlite_hal
     src/hal_i2c.c
     src/hal_onewire.c
     src/hal_pwm.c
+    src/hal_system.c
     src/hal_usb.c
     src/hal_spi.c
     src/hal_uart.c
