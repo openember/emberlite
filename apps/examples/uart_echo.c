@@ -71,7 +71,8 @@ static int stdin_set_raw(term_guard_t* g)
 
     tio.c_iflag &= (tcflag_t)~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
     tio.c_oflag &= (tcflag_t)~OPOST;
-    tio.c_lflag &= (tcflag_t)~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+    /* Keep ISIG so Ctrl-C still generates SIGINT. */
+    tio.c_lflag &= (tcflag_t)~(ECHO | ECHONL | ICANON | IEXTEN);
     tio.c_cflag &= (tcflag_t)~(CSIZE | PARENB);
     tio.c_cflag |= CS8;
     tio.c_cc[VMIN] = 1;
