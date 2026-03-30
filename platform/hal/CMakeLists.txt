@@ -1,5 +1,6 @@
 add_library(emberlite_hal
     src/hal.c
+    src/hal_gpio.c
     src/hal_uart.c
 )
 
