@@ -1,4 +1,4 @@
-# 硬件抽象层（HAL）设计规范 v1.0
+# 硬件抽象层（HAL）设计规范 v1.1
 
 ## 1. 设计目标与原则
 
@@ -9,6 +9,8 @@
 - **线程安全（Thread-Safety）**：所有公开 API 默认线程安全。
 - **灵活性（Flexibility）**：同时支持同步阻塞调用和异步事件回调，底层暴露文件描述符以供高级集成。
 - **零依赖（Zero Dependency）**：仅依赖标准 C 库（glibc）和 Linux 系统调用，无第三方库依赖。
+
+HAL 的边界（Boundary）：HAL 应该管理“外设（Peripherals）”和“总线（Buses）”，而不应该管理“协议（Protocols）”和“网络服务（Network Services）”。
 
 ## 2. 命名规范 (Naming Convention)
 
@@ -126,7 +128,7 @@ int hal_<module>_get_fd(hal_<module>_handle_t handle);
 
 ## 5. 模块详细规范
 
-### 5.1 UART (串口)
+### 5.1 UART（串口）
 
 - **特性**：流式数据，需配置波特率、流控。
 
@@ -252,6 +254,166 @@ int hal_<module>_get_fd(hal_<module>_handle_t handle);
 
   - `hal_can_send(handle, const hal_can_frame_t* frame)`
   - `hal_can_receive(handle, hal_can_frame_t* frame, int32_t timeout_ms)`
+
+### 5.6 PWM（脉冲宽度调制）
+
+- **用途**：电机控制、LED 亮度调节、舵机控制。
+
+- 关键 API：
+
+  ```c
+  hal_pwm_set_frequency(handle, hz);
+  hal_pwm_set_duty_cycle(handle, percent); // 0.0 ~ 100.0
+  hal_pwm_enable(handle);
+  ```
+
+### 5.7 ADC（模数转换）
+
+- **用途**：读取电池电压、电位器、光敏电阻。
+
+- 关键 API：
+
+  ```c
+  hal_adc_read_raw(handle, &value);      // 读取 0-4095
+  hal_adc_read_voltage(handle, &mv);     // 读取毫伏值
+  ```
+
+### 5.8 Input（输入设备）
+
+- **用途**：读取按键、编码器、触摸屏、USB 键盘。
+
+- **实现**：封装 Linux `/dev/input/event*` 和 `evdev` 协议。
+
+- 关键 API：
+
+  ```c
+  hal_input_read_event(handle, &event); // 返回按键按下/释放、坐标等
+  ```
+
+### 5.9 I2S（音频接口）
+
+- **用途**：麦克风、扬声器 (音频数据流)。
+
+- **实现**：Linux ALSA 系统非常复杂，HAL 可简化为简单的读写 PCM 数据流。直接操作 `/dev/snd/` 较复杂，使用 `alsa-lib` 更稳妥。
+
+- 关键 API：
+
+  ```c
+  typedef struct {
+      const char* device_name;   // "default" 或 "hw:0,0"
+      uint32_t sample_rate;      // 44100, 48000
+      uint8_t channels;          // 1 (Mono), 2 (Stereo)
+      uint8_t bits_per_sample;   // 16, 24, 32
+  } hal_i2s_config_t;
+  
+  hal_status_t hal_i2s_open(const hal_i2s_config_t* cfg, hal_i2s_handle_t* handle);
+  hal_status_t hal_i2s_write(hal_i2s_handle_t handle, const uint8_t* buffer, size_t frames, int timeout_ms); // 播放
+  hal_status_t hal_i2s_read(hal_i2s_handle_t handle, uint8_t* buffer, size_t frames, int timeout_ms); // 录音
+  hal_status_t hal_i2s_start(hal_i2s_handle_t handle);
+  hal_status_t hal_i2s_stop(hal_i2s_handle_t handle);
+  ```
+
+- **注意**：单位是 **Frame**（一帧包含所有声道的数据），而不是 Byte。例如 16 位立体声，1 Frame = 4 Bytes。
+
+### 5.10 1-Wire（单总线）
+
+- **用途**：连接 DS18B20 温度传感器、MAX31826 等单总线设备。
+
+- **实现方案**：
+
+  - **推荐**：利用 Linux 内核驱动 `w1-gpio`。内核负责微秒级时序，用户态通过 `/sys/bus/w1/devices/` 读取数据。稳定可靠。
+  - **不推荐**：用户态 GPIO 位翻转（Bit-banging）。Linux 不是实时系统，时序极易抖动，导致读取失败。
+
+- **关键 API**：
+
+  ```c
+  // 配置：通常只需指定总线 ID 或设备序列号
+  typedef struct {
+      const char* bus_path;      // "/sys/bus/w1/devices/"
+      const char* device_id;     // "28-000001234567" (DS18B20 序列号)
+  } hal_onewire_config_t;
+  
+  hal_status_t hal_onewire_open(const hal_onewire_config_t* cfg, hal_onewire_handle_t* handle);
+  hal_status_t hal_onewire_read_temp(hal_onewire_handle_t handle, float* temp_c); // 直接读取温度
+  hal_status_t hal_onewire_read_raw(hal_onewire_handle_t handle, uint8_t* buf, size_t len); // 读取原始数据
+  ```
+
+- **注意**：DHT11 **不是** 标准 1-Wire 协议，时序更苛刻且无内核驱动，建议用 `hal_gpio` 单独写驱动，不要混入 `hal_onewire`。
+
+### 5.11 USB
+
+- **用途**：访问非串口的 USB 设备（如自定义 HID 设备、USB 摄像头控制、U 盘读写、FTDI 特殊控制）。
+
+- **实现方案**：封装 `libusb-1.0` 库。Linux 下 USB 设备文件 (`/dev/bus/usb/...`) 权限复杂且接口底层，`libusb` 是标准做法。
+
+- **关键 API**：
+
+  ```c
+  typedef struct {
+      uint16_t vendor_id;
+      uint16_t product_id;
+      int interface_number;
+  } hal_usb_config_t;
+  
+  // 控制传输 (配置设备)
+  hal_status_t hal_usb_control_transfer(hal_usb_handle_t handle, uint8_t req_type, uint8_t req, uint16_t val, uint16_t idx, uint8_t* data, size_t len);
+  
+  // 批量传输 (大数据)
+  hal_status_t hal_usb_bulk_write(hal_usb_handle_t handle, uint8_t endpoint, const uint8_t* data, size_t len, int timeout_ms);
+  hal_status_t hal_usb_bulk_read(hal_usb_handle_t handle, uint8_t endpoint, uint8_t* data, size_t len, int timeout_ms, size_t* out_len);
+  ```
+
+- **注意**：USB 转串口设备（如 CH340）**不应** 使用此模块，应直接使用 `hal_uart` (`/dev/ttyUSB0`)，这样更简单高效。
+
+### 5.12 System（系统信息/服务）
+
+- **用途**：获取 CPU 温度、内存使用、运行时间，设置定时器、看门狗等。
+
+- 关键 API：
+
+  ```c
+  /* hal_system.h */
+  
+  // 1. 时间获取 (替代 HAL 中的时间函数)
+  uint64_t hal_system_get_time_ms(void);   // 单调递增时间 (ms)
+  uint64_t hal_system_get_time_us(void);   // 单调递增时间 (us)
+  uint64_t hal_system_get_uptime_ms(void); // 系统运行时间
+  uint64_t hal_system_get_cpu_temp(void);  // CPU温度
+  
+  // 2. 延时 (阻塞)
+  void hal_system_sleep_ms(uint32_t ms);
+  
+  // 3. 定时器句柄 (基于 timerfd)
+  typedef void* hal_timer_handle_t;
+  
+  typedef struct {
+      uint32_t interval_ms;   // 间隔时间
+      uint32_t initial_ms;    // 初始延迟
+      bool periodic;          // 是否周期触发
+  } hal_timer_config_t;
+  
+  typedef void (*hal_timer_callback_t)(hal_timer_handle_t handle, void* user_data);
+  
+  // 4. 定时器 API
+  hal_timer_handle_t hal_timer_create(const hal_timer_config_t* cfg, hal_timer_callback_t cb, void* user_data);
+  hal_status_t hal_timer_start(hal_timer_handle_t handle);
+  hal_status_t hal_timer_stop(hal_timer_handle_t handle);
+  void hal_timer_destroy(hal_timer_handle_t handle);
+  
+  // 5. 集成到事件循环 (关键)
+  // 允许用户将定时器 FD 加入自己的 epoll
+  int hal_timer_get_fd(hal_timer_handle_t handle); 
+  
+  // 6. 看门狗 - 系统死机自动重启，封装 `/dev/watchdog`
+  int hal_watchdog_feed(handle); // 喂狗
+  int hal_watchdog_set_timeout(handle, seconds);
+  ```
+
+注意事项：
+
+- **统一性**：`hal_timer_get_fd()` 返回的文件描述符可以和 `hal_uart_get_fd()` 一起放入同一个 `epoll` 循环中。
+- **非阻塞**：不需要创建额外的线程，由主事件循环统一调度。
+- **精准度**：`timerfd` 由内核保证精度，优于 `sleep` + 线程。
 
 ## 6. 线程安全与并发设计
 

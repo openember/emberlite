@@ -65,6 +65,33 @@ Executor 调度层
 
 
 
+### 三层架构
+
+建议采用三层架构：
+
+```
++-----------------------------+
+|        Application          |  (业务逻辑：MQTT, HTTP, 算法)
++-----------------------------+
+|      Middleware / Libs      |  (协议栈：Bluetooth BLE, WiFi Config, File System)
++-----------------------------+
+|          HAL Layer          |  (硬件抽象：UART, GPIO, PWM, ADC, I2C, SPI)
++-----------------------------+
+|       Linux Kernel          |  (驱动：tty, gpio, iio, pwm, net)
++-----------------------------+
+|          Hardware           |  (芯片：SoC, 传感器，模块)
++-----------------------------+
+```
+
+- HAL 层：只关心“怎么读写寄存器/设备文件”，不关心“数据代表什么意义”。
+  - 例如：`hal_uart_read` 只负责把字节读上来，不解析是否是 JSON。
+  - 例如：`hal_adc_read` 只返回电压值，不负责判断“电量是否过低”。
+- Middleware 层：关心协议和业务。
+  - 例如：`Bluetooth_BLE` 模块调用 `hal_uart` (HCI 接口) 或 Socket 来实现 BLE 协议。
+  - 例如：`DHT11_Driver` 模块调用 `hal_gpio` 的精确延时来实现 DHT11 时序。
+
+
+
 ## 核心 Runtime 组件
 
 ### ember_node
