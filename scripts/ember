@@ -1,0 +1,328 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_realpath() {
+  local p="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$p"
+  else
+    readlink -f "$p"
+  fi
+}
+
+find_project_root() {
+  # 1) explicit override
+  if [[ -n "${OPENEMBER_ROOT:-}" ]]; then
+    echo "${OPENEMBER_ROOT}"
+    return 0
+  fi
+
+  # 2) run from project root (works for symlinked ember in repo root or /usr/local/bin)
+  if [[ -f "./CMakeLists.txt" && -f "./scripts/kconfig/menuconfig.sh" ]]; then
+    pwd
+    return 0
+  fi
+
+  # 3) derive from script real path
+  local self_real script_dir candidate
+  self_real="$(resolve_realpath "${BASH_SOURCE[0]}")"
+  script_dir="$(cd "$(dirname "${self_real}")" && pwd)"
+  candidate="$(cd "${script_dir}/.." && pwd)"
+  if [[ -f "${candidate}/CMakeLists.txt" && -f "${candidate}/scripts/kconfig/menuconfig.sh" ]]; then
+    echo "${candidate}"
+    return 0
+  fi
+
+  echo "Cannot locate OpenEmber project root." >&2
+  echo "Please run from project root, or set OPENEMBER_ROOT=/path/to/openember." >&2
+  return 1
+}
+
+ROOT_DIR="$(find_project_root)"
+BUILD_DIR="${OPENEMBER_BUILD_DIR:-build}"
+JOBS="${OPENEMBER_JOBS:-$(nproc)}"
+EMBER_COMPLETION_BEGIN="# >>> openember ember completion >>>"
+EMBER_COMPLETION_END="# <<< openember ember completion <<<"
+EMBER_PATH_BEGIN="# >>> openember ember path >>>"
+EMBER_PATH_END="# <<< openember ember path <<<"
+REAL_USER="${SUDO_USER:-${USER}}"
+REAL_HOME="$(getent passwd "${REAL_USER}" | cut -d: -f6)"
+if [[ -z "${REAL_HOME}" ]]; then
+  REAL_HOME="${HOME}"
+fi
+
+usage() {
+  cat <<EOF
+OpenEmber CLI — Kconfig + CMake helpers
+
+Usage:
+  ember menuconfig [build_dir]
+  ember genconfig [build_dir]
+  ember update [build_dir]
+  ember build [build_dir]
+  ember all [build_dir]
+  ember clean [build_dir]
+  ember completion bash
+  ember install [--prefix <dir>]
+  ember uninstall [--prefix <dir>]
+  ember help
+
+Commands:
+  menuconfig   Interactive Kconfig UI; writes build/.config, then runs genconfig to refresh build/config.cmake
+  genconfig    Map build/.config → build/config.cmake (CMake cache variables); use alone if .config was edited elsewhere
+  update       Run CMake configure (cmake -S -B): applies config.cmake, may fetch/extract third-party sources
+  build        Ensure .config and config.cmake exist, then update + compile (parallel jobs: OPENEMBER_JOBS)
+  all          menuconfig + update + build (full interactive flow)
+  clean        Remove the build directory (default: build/)
+  completion   Print shell completion script (e.g. "completion bash")
+  install      Symlink this script into PATH and optionally register bash completion (~/.bashrc)
+  uninstall    Remove ember symlink(s) and completion/PATH blocks from ~/.bashrc
+
+Legacy alias: "ember configure" is the same as "ember update".
+
+Environment:
+  OPENEMBER_BUILD_DIR   default build dir (default: build)
+  OPENEMBER_JOBS        parallel jobs for build (default: nproc)
+  OPENEMBER_KCONFIG_NONINTERACTIVE=1  generate default .config without TUI (menuconfig)
+EOF
+}
+
+resolve_build_dir() {
+  local arg="${1:-}"
+  if [[ -n "${arg}" ]]; then
+    echo "${arg}"
+  else
+    echo "${BUILD_DIR}"
+  fi
+}
+
+# After menuconfig exits, refresh build/config.cmake (same as standalone ember genconfig).
+run_menuconfig_and_genconfig() {
+  local bd="$1"
+  bash "${ROOT_DIR}/scripts/kconfig/menuconfig.sh" "${bd}"
+  bash "${ROOT_DIR}/scripts/kconfig/genconfig.sh" "${bd}"
+}
+
+upsert_block_in_file() {
+  local file="$1"
+  local begin="$2"
+  local end="$3"
+  local content="$4"
+
+  mkdir -p "$(dirname "${file}")"
+  touch "${file}"
+
+  awk -v b="${begin}" -v e="${end}" '
+    $0 == b { in_block=1; next }
+    $0 == e { in_block=0; next }
+    !in_block { print }
+  ' "${file}" > "${file}.tmp"
+  mv "${file}.tmp" "${file}"
+
+  {
+    printf "\n%s\n" "${begin}"
+    printf "%s\n" "${content}"
+    printf "%s\n" "${end}"
+  } >> "${file}"
+}
+
+remove_block_in_file() {
+  local file="$1"
+  local begin="$2"
+  local end="$3"
+  if [[ ! -f "${file}" ]]; then
+    return 0
+  fi
+  awk -v b="${begin}" -v e="${end}" '
+    $0 == b { in_block=1; next }
+    $0 == e { in_block=0; next }
+    !in_block { print }
+  ' "${file}" > "${file}.tmp"
+  mv "${file}.tmp" "${file}"
+}
+
+install_with_prefix() {
+  local target_bin="$1"
+  local target_link="${target_bin}/ember"
+  local bashrc="${REAL_HOME}/.bashrc"
+  local self_real
+  self_real="$(resolve_realpath "${BASH_SOURCE[0]}")"
+
+  if ! mkdir -p "${target_bin}" 2>/dev/null || ! ln -sfn "${self_real}" "${target_link}" 2>/dev/null; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo mkdir -p "${target_bin}"
+      sudo ln -sfn "${self_real}" "${target_link}"
+    else
+      echo "Cannot write ${target_bin}. Try a writable prefix or install sudo." >&2
+      return 1
+    fi
+  fi
+
+  upsert_block_in_file "${bashrc}" "${EMBER_PATH_BEGIN}" "${EMBER_PATH_END}" \
+"if [ -d \"${target_bin}\" ] && [[ \":\$PATH:\" != *\":${target_bin}:\"* ]]; then
+  export PATH=\"${target_bin}:\$PATH\"
+fi"
+
+  upsert_block_in_file "${bashrc}" "${EMBER_COMPLETION_BEGIN}" "${EMBER_COMPLETION_END}" \
+'if command -v ember >/dev/null 2>&1; then
+  source <(ember completion bash)
+fi'
+
+  echo "[ember] installed to ${target_link}"
+  echo "[ember] bash completion registered in ${bashrc} (new shells auto-load)"
+}
+
+remove_ember_link() {
+  local target_link="$1"
+  if [[ ! -L "${target_link}" && ! -e "${target_link}" ]]; then
+    return 0
+  fi
+  if ! rm -f "${target_link}" 2>/dev/null; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo rm -f "${target_link}"
+    else
+      echo "Cannot remove ${target_link}. Try with a writable prefix." >&2
+      return 1
+    fi
+  fi
+  echo "[ember] removed ${target_link}"
+}
+
+uninstall_auto() {
+  local target_prefix="${1:-}"
+  local bashrc="${REAL_HOME}/.bashrc"
+  local cand
+  local -a candidates=()
+  local -A seen=()
+
+  if command -v which >/dev/null 2>&1; then
+    while IFS= read -r cand; do
+      [[ -n "${cand}" ]] && candidates+=("${cand}")
+    done < <(which -a ember 2>/dev/null || true)
+  fi
+
+  candidates+=("${REAL_HOME}/.local/bin/ember" "/usr/local/bin/ember")
+  if [[ -n "${target_prefix}" ]]; then
+    candidates+=("${target_prefix%/}/ember")
+  fi
+
+  for cand in "${candidates[@]}"; do
+    [[ -n "${cand}" ]] || continue
+    if [[ -n "${seen[${cand}]:-}" ]]; then
+      continue
+    fi
+    seen["${cand}"]=1
+    remove_ember_link "${cand}" || true
+  done
+
+  remove_block_in_file "${bashrc}" "${EMBER_COMPLETION_BEGIN}" "${EMBER_COMPLETION_END}"
+  remove_block_in_file "${bashrc}" "${EMBER_PATH_BEGIN}" "${EMBER_PATH_END}"
+  echo "[ember] removed PATH/completion blocks from ${bashrc}"
+}
+
+parse_prefix_arg() {
+  local default_prefix="${1:-}"
+  local prefix="${default_prefix}"
+  shift || true
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --prefix)
+        if [[ $# -lt 2 || -z "${2:-}" ]]; then
+          echo "Missing value for --prefix" >&2
+          return 1
+        fi
+        prefix="$2"
+        shift 2
+        ;;
+      --user)
+        prefix="${REAL_HOME}/.local/bin"
+        shift
+        ;;
+      --system)
+        prefix="/usr/local/bin"
+        shift
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  echo "${prefix}"
+}
+
+cmd="${1:-help}"
+arg_build_dir="${2:-}"
+bd="$(resolve_build_dir "${arg_build_dir}")"
+
+case "${cmd}" in
+  menuconfig)
+    run_menuconfig_and_genconfig "${bd}"
+    ;;
+  genconfig)
+    bash "${ROOT_DIR}/scripts/kconfig/genconfig.sh" "${bd}"
+    ;;
+  update|configure)
+    cmake -S "${ROOT_DIR}" -B "${bd}"
+    ;;
+  build)
+    # Auto bootstrap config pipeline if needed.
+    if [[ ! -f "${bd}/.config" ]]; then
+      echo "[ember] ${bd}/.config not found, generating default config..." >&2
+      OPENEMBER_KCONFIG_NONINTERACTIVE=1 bash "${ROOT_DIR}/scripts/kconfig/menuconfig.sh" "${bd}"
+      bash "${ROOT_DIR}/scripts/kconfig/genconfig.sh" "${bd}"
+    fi
+    if [[ ! -f "${bd}/config.cmake" ]]; then
+      echo "[ember] ${bd}/config.cmake not found, generating..." >&2
+      bash "${ROOT_DIR}/scripts/kconfig/genconfig.sh" "${bd}"
+    fi
+    cmake -S "${ROOT_DIR}" -B "${bd}"
+    cmake --build "${bd}" -j"${JOBS}"
+    ;;
+  all)
+    run_menuconfig_and_genconfig "${bd}"
+    cmake -S "${ROOT_DIR}" -B "${bd}"
+    cmake --build "${bd}" -j"${JOBS}"
+    ;;
+  clean)
+    rm -rf "${bd}"
+    ;;
+  completion)
+    shell_name="${2:-bash}"
+    case "${shell_name}" in
+      bash)
+        cat "${ROOT_DIR}/scripts/completions/ember.bash"
+        ;;
+      *)
+        echo "Unsupported shell for completion: ${shell_name}" >&2
+        echo "Currently supported: bash" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  install)
+    if ! prefix="$(parse_prefix_arg "${REAL_HOME}/.local/bin" "${@:2}")"; then
+      echo "Usage: ember install [--prefix <dir>]" >&2
+      exit 1
+    fi
+    install_with_prefix "${prefix}"
+    ;;
+  uninstall)
+    if ! prefix="$(parse_prefix_arg "" "${@:2}")"; then
+      echo "Usage: ember uninstall [--prefix <dir>]" >&2
+      exit 1
+    fi
+    uninstall_auto "${prefix}"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: ${cmd}" >&2
+    usage
+    exit 1
+    ;;
+esac
+

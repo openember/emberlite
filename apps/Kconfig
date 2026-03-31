@@ -1,0 +1,8 @@
+menu "Applications"
+
+config OPENEMBER_ENABLE_EXAMPLES
+  bool "Build UART examples (hal_uart_term, hal_uart_echo)"
+  default y
+  depends on OPENEMBER_ENABLE_HAL
+
+endmenu

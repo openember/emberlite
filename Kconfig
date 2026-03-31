@@ -1,0 +1,6 @@
+mainmenu "EmberLite Configuration"
+
+source "apps/Kconfig"
+source "components/Kconfig"
+source "platform/Kconfig"
+source "third_party/Kconfig"

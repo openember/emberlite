@@ -1,0 +1,7 @@
+menu "Components"
+
+config OPENEMBER_ENABLE_CRYPTO
+  bool "Build ember_crypto (CRC/MD5/SHA256)"
+  default y
+
+endmenu

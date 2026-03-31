@@ -1,0 +1,21 @@
+menu "Third-party"
+
+choice
+  prompt "Third-party source mode"
+  default OPENEMBER_TP_MODE_FETCH
+  help
+    FETCH: download archives into third_party/ cache when bundles are enabled (future).
+    VENDOR: use only archives or local trees under third_party/ (no network fetch).
+    SYSTEM: prefer system-installed packages where applicable.
+
+config OPENEMBER_TP_MODE_FETCH
+  bool "FETCH (download or cache under third_party/)"
+
+config OPENEMBER_TP_MODE_VENDOR
+  bool "VENDOR (local archives only, no network fetch)"
+
+config OPENEMBER_TP_MODE_SYSTEM
+  bool "SYSTEM (prefer system packages)"
+endchoice
+
+endmenu

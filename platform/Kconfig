@@ -1,0 +1,49 @@
+menu "Platform / HAL"
+
+config OPENEMBER_ENABLE_HAL
+  bool "Build platform HAL library (emberlite_hal)"
+  default y
+  help
+    When disabled, emberlite_hal is not built or linked. UART examples require HAL.
+
+if OPENEMBER_ENABLE_HAL
+
+choice
+  prompt "ALSA support (HAL I2S)"
+  default OPENEMBER_HAL_ALSA_AUTO
+  help
+    AUTO: enable HAL_HAS_ALSA when ALSA is found on the system (legacy behavior).
+    ON: require ALSA; CMake configure fails if not found.
+    OFF: do not use ALSA even if installed.
+
+config OPENEMBER_HAL_ALSA_AUTO
+  bool "AUTO (enable if ALSA is found)"
+
+config OPENEMBER_HAL_ALSA_ON
+  bool "ON (require ALSA)"
+
+config OPENEMBER_HAL_ALSA_OFF
+  bool "OFF (disable ALSA)"
+endchoice
+
+choice
+  prompt "libusb support (HAL USB)"
+  default OPENEMBER_HAL_LIBUSB_AUTO
+  help
+    AUTO: enable HAL_HAS_LIBUSB when libusb-1.0 is found via pkg-config.
+    ON: require libusb-1.0; configure fails if missing.
+    OFF: do not use libusb even if present.
+
+config OPENEMBER_HAL_LIBUSB_AUTO
+  bool "AUTO (enable if libusb is found)"
+
+config OPENEMBER_HAL_LIBUSB_ON
+  bool "ON (require libusb-1.0)"
+
+config OPENEMBER_HAL_LIBUSB_OFF
+  bool "OFF (disable libusb)"
+endchoice
+
+endif # OPENEMBER_ENABLE_HAL
+
+endmenu
