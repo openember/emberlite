@@ -9,7 +9,7 @@ _ember_complete() {
   words=("${COMP_WORDS[@]}")
   cword="${COMP_CWORD}"
 
-  local commands="add list use current menuconfig genconfig update configure build all clean completion install uninstall help -h --help"
+  local commands="add del list use current menuconfig genconfig update configure build all clean completion install uninstall help -h --help"
 
   # First positional arg: subcommand.
   if [[ "${cword}" -eq 1 ]]; then
@@ -32,6 +32,15 @@ _ember_complete() {
   # use <name>
   if [[ "${words[1]}" == "use" && "${cword}" -eq 2 ]]; then
     # best-effort: list names by reading ~/.openember/ember/envs
+    local env_dir="${HOME}/.openember/ember/envs"
+    if [[ -d "${env_dir}" ]]; then
+      COMPREPLY=( $(compgen -W "$(ls -1 "${env_dir}" 2>/dev/null)" -- "${cur}") )
+    fi
+    return 0
+  fi
+
+  # del <name>
+  if [[ "${words[1]}" == "del" && "${cword}" -eq 2 ]]; then
     local env_dir="${HOME}/.openember/ember/envs"
     if [[ -d "${env_dir}" ]]; then
       COMPREPLY=( $(compgen -W "$(ls -1 "${env_dir}" 2>/dev/null)" -- "${cur}") )
