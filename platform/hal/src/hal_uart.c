@@ -1,6 +1,7 @@
 /*
  * EmberLite HAL - UART (POSIX termios)
  */
+#define _GNU_SOURCE /* BOTHER, CBAUD, cfsetspeed extras on Linux */
 
 #include "hal/hal_uart.h"
 
@@ -11,7 +12,32 @@
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
+
+#if defined(__linux__) && !defined(BOTHER)
+#define BOTHER 0010000 /* kernel asm-generic/termbits.h; glibc may omit when not _GNU_SOURCE */
+#endif
+
+#if defined(__linux__)
+/*
+ * TCGETS2 / TCSETS2 need struct termios2. Kernel UAPI matches this layout
+ * (cannot include linux/asm termbits.h alongside glibc termios.h — redefinition).
+ */
+#include <asm-generic/ioctls.h>
+#include <stdint.h>
+
+struct termios2 {
+    uint32_t c_iflag;
+    uint32_t c_oflag;
+    uint32_t c_cflag;
+    uint32_t c_lflag;
+    uint8_t c_line;
+    uint8_t c_cc[19];
+    uint32_t c_ispeed;
+    uint32_t c_ospeed;
+};
+#endif /* __linux__ */
 
 struct hal_uart_handle_impl {
     int fd;
@@ -98,9 +124,88 @@ static speed_t hal_uart_baud_to_speed(uint32_t baud)
     case 921600:
         return B921600;
 #endif
+#ifdef B1000000
+    case 1000000:
+        return B1000000;
+#endif
+#ifdef B1152000
+    case 1152000:
+        return B1152000;
+#endif
+#ifdef B1500000
+    case 1500000:
+        return B1500000;
+#endif
+#ifdef B2000000
+    case 2000000:
+        return B2000000;
+#endif
+#ifdef B2500000
+    case 2500000:
+        return B2500000;
+#endif
+#ifdef B3000000
+    case 3000000:
+        return B3000000;
+#endif
+#ifdef B3500000
+    case 3500000:
+        return B3500000;
+#endif
+#ifdef B4000000
+    case 4000000:
+        return B4000000;
+#endif
     default:
         return (speed_t)0;
     }
+}
+
+#if defined(__linux__)
+static hal_status_t hal_uart_apply_termios_baud_linux(int fd,
+                                                      struct termios* tio,
+                                                      uint32_t baud)
+{
+    struct termios2 t2;
+    if (ioctl(fd, TCGETS2, &t2) != 0) {
+        return hal_status_from_errno(errno);
+    }
+    t2.c_iflag = (uint32_t)tio->c_iflag;
+    t2.c_oflag = (uint32_t)tio->c_oflag;
+    t2.c_cflag = (uint32_t)tio->c_cflag;
+    t2.c_lflag = (uint32_t)tio->c_lflag;
+    t2.c_line = tio->c_line;
+    memcpy(t2.c_cc, tio->c_cc, sizeof(t2.c_cc));
+    t2.c_cflag &= (uint32_t) ~(tcflag_t)CBAUD;
+    t2.c_cflag |= (uint32_t)BOTHER;
+    t2.c_ispeed = baud;
+    t2.c_ospeed = baud;
+    if (ioctl(fd, TCSETS2, &t2) != 0) {
+        return hal_status_from_errno(errno);
+    }
+    return HAL_OK;
+}
+#endif
+
+static hal_status_t hal_uart_apply_termios_baud(int fd, struct termios* tio, uint32_t baud)
+{
+    speed_t spd = hal_uart_baud_to_speed(baud);
+    if (spd != (speed_t)0) {
+        if (cfsetispeed(tio, spd) != 0 || cfsetospeed(tio, spd) != 0) {
+            return hal_status_from_errno(errno);
+        }
+        if (tcsetattr(fd, TCSANOW, tio) != 0) {
+            return hal_status_from_errno(errno);
+        }
+        return HAL_OK;
+    }
+#if defined(__linux__)
+    return hal_uart_apply_termios_baud_linux(fd, tio, baud);
+#else
+    (void)fd;
+    (void)tio;
+    return HAL_ERR_NOT_SUPPORTED;
+#endif
 }
 
 static hal_status_t hal_uart_apply_config_locked(struct hal_uart_handle_impl* h,
@@ -196,15 +301,6 @@ static hal_status_t hal_uart_apply_config_locked(struct hal_uart_handle_impl* h,
         return HAL_ERR_INVALID_PARAM;
     }
 
-    /* Baud rate. */
-    speed_t spd = hal_uart_baud_to_speed(cfg->baudrate);
-    if (spd == (speed_t)0) {
-        return HAL_ERR_NOT_SUPPORTED;
-    }
-    if (cfsetispeed(&tio, spd) != 0 || cfsetospeed(&tio, spd) != 0) {
-        return hal_status_from_errno(errno);
-    }
-
     /*
      * Make read return as soon as data is available (VMIN=1),
      * and let higher level handle timeouts via poll().
@@ -212,8 +308,10 @@ static hal_status_t hal_uart_apply_config_locked(struct hal_uart_handle_impl* h,
     tio.c_cc[VMIN] = 1;
     tio.c_cc[VTIME] = 0;
 
-    if (tcsetattr(h->fd, TCSANOW, &tio) != 0) {
-        return hal_status_from_errno(errno);
+    /* Baud: POSIX Bxxx when available; Linux TCSETS2 + BOTHER for other values (e.g. 100000, odd rates). */
+    hal_status_t st_baud = hal_uart_apply_termios_baud(h->fd, &tio, cfg->baudrate);
+    if (st_baud != HAL_OK) {
+        return st_baud;
     }
 
     h->cfg = *cfg;

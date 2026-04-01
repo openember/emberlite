@@ -13,7 +13,7 @@ typedef struct hal_uart_handle_impl* hal_uart_handle_t;
 
 typedef struct {
     const char* path;      /* e.g. "/dev/ttyUSB0" */
-    uint32_t baudrate;     /* e.g. 115200 */
+    uint32_t baudrate;     /* common Bxxx or custom (e.g. 100000); on Linux arbitrary rates via BOTHER */
     uint8_t data_bits;     /* 5..8 */
     uint8_t stop_bits;     /* 1 or 2 */
     uint8_t parity;        /* 0=None, 1=Odd, 2=Even */
