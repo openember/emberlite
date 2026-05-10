@@ -38,6 +38,18 @@ config OPENEMBER_THIRD_PARTY_BUNDLE_ZENOHPICO
   help
     When enabled, FETCH/VENDOR mode can download/extract and build zenoh-pico from source archives.
 
+config OPENEMBER_THIRD_PARTY_BUNDLE_YYJSON
+  bool "Bundle: yyjson"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract and build yyjson from source archives.
+
+config OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML
+  bool "Bundle: libyaml"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract and build libyaml from source archives.
+
 endmenu
 
 menu "Libraries (build into this project)"
@@ -59,6 +71,18 @@ config OPENEMBER_ENABLE_ZENOHPICO
   default n
   help
     When enabled, CMake resolves zenoh-pico and creates target emberlite::zenohpico.
+
+config OPENEMBER_ENABLE_YYJSON
+  bool "Build and expose yyjson"
+  default n
+  help
+    When enabled, CMake resolves yyjson and creates target emberlite::yyjson.
+
+config OPENEMBER_ENABLE_LIBYAML
+  bool "Build and expose libyaml"
+  default n
+  help
+    When enabled, CMake resolves libyaml and creates target emberlite::libyaml.
 
 endmenu
 

@@ -17,6 +17,12 @@ Kconfig：`Third-party` 菜单（[`third_party/Kconfig`](../third_party/Kconfig)
 | [nng](https://github.com/nanomsg/nng) | `OPENEMBER_NNG_VERSION` | `cmake/GetNng.cmake` | `emberlite::nng` |
 | [lcm](https://github.com/lcm-proj/lcm) | `OPENEMBER_LCM_VERSION` | `cmake/GetLcm.cmake` | `emberlite::lcm`（自动链接 `glib-2.0`） |
 | [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) | `OPENEMBER_ZENOHPICO_VERSION` | `cmake/GetZenohPico.cmake` | `emberlite::zenohpico` |
+| [yyjson](https://github.com/ibireme/yyjson) | `OPENEMBER_YYJSON_VERSION` | `cmake/GetYyjson.cmake` | `emberlite::yyjson` |
+| [libyaml](https://github.com/yaml/libyaml) | `OPENEMBER_LIBYAML_VERSION` | `cmake/GetLibyaml.cmake` | `emberlite::libyaml` |
+
+### 关于 libyaml 与「只有 Makefile」
+
+上游文档常见流程是 Autotools（`configure` / `make`）。**当前钉死的 `0.2.5` 源码归档已包含根目录 `CMakeLists.txt`**，因此 EmberLite 与其它库一致走 **CMake + `ExternalProject` + 静态安装**。若你手上只有无 CMake 的Release 包，可自行放入 `third_party/` 并用 `OPENEMBER_LIBYAML_LOCAL_SOURCE` 指向已解压目录（仍需能通过 CMake 构建）；纯 Makefile-only 的接入需要单独写 `ExternalProject` 的 `CONFIGURE_COMMAND`/`BUILD_COMMAND`（可按需再扩展）。
 
 在 menuconfig 中勾选 **Libraries (build into this project)** 下的对应项后，运行 `genconfig.sh`，再配置 CMake。
 
@@ -33,6 +39,8 @@ OpenEmber 若同时启用多个同类依赖，也可能遇到同类限制；Embe
 - `OPENEMBER_NNG_LOCAL_SOURCE`
 - `OPENEMBER_LCM_LOCAL_SOURCE`
 - `OPENEMBER_ZENOHPICO_LOCAL_SOURCE`
+- `OPENEMBER_YYJSON_LOCAL_SOURCE`
+- `OPENEMBER_LIBYAML_LOCAL_SOURCE`
 
 ## 升级
 

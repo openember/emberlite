@@ -67,10 +67,22 @@ if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_ZENOHPICO" "${CONFIG_FILE}"; t
 else
   bundle_zenohpico="$(onoff CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_ZENOHPICO)"
 fi
+if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_YYJSON" "${CONFIG_FILE}"; then
+  bundle_yyjson=ON
+else
+  bundle_yyjson="$(onoff CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_YYJSON)"
+fi
+if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML" "${CONFIG_FILE}"; then
+  bundle_libyaml=ON
+else
+  bundle_libyaml="$(onoff CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML)"
+fi
 
 enable_nng="$(onoff CONFIG_OPENEMBER_ENABLE_NNG)"
 enable_lcm="$(onoff CONFIG_OPENEMBER_ENABLE_LCM)"
 enable_zenohpico="$(onoff CONFIG_OPENEMBER_ENABLE_ZENOHPICO)"
+enable_yyjson="$(onoff CONFIG_OPENEMBER_ENABLE_YYJSON)"
+enable_libyaml="$(onoff CONFIG_OPENEMBER_ENABLE_LIBYAML)"
 
 OUT="${BUILD_DIR}/config.cmake"
 mkdir -p "$(dirname "${OUT}")"
@@ -82,9 +94,13 @@ mkdir -p "$(dirname "${OUT}")"
   echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_NNG ${bundle_nng} CACHE BOOL \"Bundle: nng\" FORCE)"
   echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_LCM ${bundle_lcm} CACHE BOOL \"Bundle: lcm\" FORCE)"
   echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_ZENOHPICO ${bundle_zenohpico} CACHE BOOL \"Bundle: zenoh-pico\" FORCE)"
+  echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_YYJSON ${bundle_yyjson} CACHE BOOL \"Bundle: yyjson\" FORCE)"
+  echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML ${bundle_libyaml} CACHE BOOL \"Bundle: libyaml\" FORCE)"
   echo "set(OPENEMBER_ENABLE_NNG ${enable_nng} CACHE BOOL \"Build and link nng\" FORCE)"
   echo "set(OPENEMBER_ENABLE_LCM ${enable_lcm} CACHE BOOL \"Build and link lcm\" FORCE)"
   echo "set(OPENEMBER_ENABLE_ZENOHPICO ${enable_zenohpico} CACHE BOOL \"Build and link zenoh-pico\" FORCE)"
+  echo "set(OPENEMBER_ENABLE_YYJSON ${enable_yyjson} CACHE BOOL \"Build and link yyjson\" FORCE)"
+  echo "set(OPENEMBER_ENABLE_LIBYAML ${enable_libyaml} CACHE BOOL \"Build and link libyaml\" FORCE)"
   if [[ "${hal_enabled}" == ON ]]; then
     echo "set(OPENEMBER_ENABLE_HAL ON CACHE BOOL \"Build platform HAL (emberlite_hal)\" FORCE)"
     echo "set(OPENEMBER_HAL_ALSA \"${hal_alsa}\" CACHE STRING \"HAL ALSA: AUTO|ON|OFF\" FORCE)"
