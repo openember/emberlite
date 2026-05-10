@@ -18,4 +18,48 @@ config OPENEMBER_TP_MODE_SYSTEM
   bool "SYSTEM (prefer system packages)"
 endchoice
 
+menu "Bundles (source archives in FETCH/VENDOR)"
+
+config OPENEMBER_THIRD_PARTY_BUNDLE_NNG
+  bool "Bundle: nng"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract and build nng from source archives.
+
+config OPENEMBER_THIRD_PARTY_BUNDLE_LCM
+  bool "Bundle: lcm"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract and build lcm from source archives.
+
+config OPENEMBER_THIRD_PARTY_BUNDLE_ZENOHPICO
+  bool "Bundle: zenoh-pico"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract and build zenoh-pico from source archives.
+
+endmenu
+
+menu "Libraries (build into this project)"
+
+config OPENEMBER_ENABLE_NNG
+  bool "Build and expose nng (nanomsg-next-gen)"
+  default n
+  help
+    When enabled, CMake resolves nng (FETCH/VENDOR/SYSTEM) and creates target emberlite::nng.
+
+config OPENEMBER_ENABLE_LCM
+  bool "Build and expose LCM"
+  default n
+  help
+    When enabled, CMake resolves lcm and creates target emberlite::lcm.
+
+config OPENEMBER_ENABLE_ZENOHPICO
+  bool "Build and expose zenoh-pico"
+  default n
+  help
+    When enabled, CMake resolves zenoh-pico and creates target emberlite::zenohpico.
+
+endmenu
+
 endmenu

@@ -1,42 +1,40 @@
-# 第三方依赖管理（EmberLite）
+# EmberLite 第三方库管理
 
-EmberLite 沿用 OpenEmber 的命名与 CMake 约定，便于后续对齐完整框架。当前仓库为**最小迁移**：已具备 **Kconfig → `build/.config` → `build/config.cmake`**、`third_party/` 缓存目录与 `cmake/ThirdPartyArchive.cmake` 等基础设施；具体 **Get\*.cmake** 与上游包可在需要时再接入。
+与 [OpenEmber 第三方管理说明](../../openember/docs/third-party-management.md) 对齐：**版本与下载 URL 的唯一事实来源**为 [`cmake/Dependencies.cmake`](../cmake/Dependencies.cmake)；离线缓存目录默认为仓库根下 [`third_party/`](../third_party/)。
 
-## 模式：`OPENEMBER_THIRD_PARTY_MODE`
+## 模式
 
-由根目录 **Kconfig**（`third_party/Kconfig`）与 `scripts/kconfig/genconfig.sh` 写入 **`build/config.cmake`**，对应 CMake 缓存变量 **`OPENEMBER_THIRD_PARTY_MODE`**：
+- **FETCH**：优先使用 `third_party/<cache-key>.tar.gz`，否则下载到 `third_party/` 再解压到 `build/_deps/<上游顶层目录>/`。
+- **VENDOR**：仅使用 `third_party/` 已有归档或 `*_LOCAL_SOURCE` 指向的已解压目录（不联网）。
+- **SYSTEM**：使用系统已安装的包（`find_path` / `find_library` / `pkg-config`）。
 
-| 模式 | 含义 |
-|------|------|
-| **FETCH** | 将来接入 bundle 时，可从固定 URL 下载到 `third_party/` 再解压到 `build/_deps/`（见 `cmake/ThirdPartyArchive.cmake`）。 |
-| **VENDOR** | 仅使用已放入 `third_party/` 的归档或本地源码树，不主动联网下载。 |
-| **SYSTEM** | 优先/仅使用系统已安装的包（与企业或 Yocto 场景对齐；具体目标库需在对应 Get 脚本中实现）。 |
+Kconfig：`Third-party` 菜单（[`third_party/Kconfig`](../third_party/Kconfig)）选择模式；`scripts/kconfig/genconfig.sh` 生成 `build/config.cmake`。
 
-当前 EmberLite **未**在 `cmake/Dependencies.cmake` 中 `include` 任何 Get 脚本，因此配置阶段不会因缺包而拉取大型依赖；模式变量主要为后续扩展保留。
+## 已接入的库（首批）
 
-## 缓存目录：`third_party/`
+| 库 | 版本变量 | Get 脚本 | CMake 聚合目标（启用时） |
+|----|----------|----------|---------------------------|
+| [nng](https://github.com/nanomsg/nng) | `OPENEMBER_NNG_VERSION` | `cmake/GetNng.cmake` | `emberlite::nng` |
+| [lcm](https://github.com/lcm-proj/lcm) | `OPENEMBER_LCM_VERSION` | `cmake/GetLcm.cmake` | `emberlite::lcm`（自动链接 `glib-2.0`） |
+| [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) | `OPENEMBER_ZENOHPICO_VERSION` | `cmake/GetZenohPico.cmake` | `emberlite::zenohpico` |
 
-- 约定与 OpenEmber 一致：将 `<package>-<version>.tar.gz` 或 `.zip` 放在 **`${CMAKE_SOURCE_DIR}/third_party`**（或覆盖缓存变量 **`OPENEMBER_THIRD_PARTY_CACHE_DIR`**）。
-- 目录已纳入仓库占位（`.gitkeep`），便于离线或 VENDOR 流程落库归档。
+在 menuconfig 中勾选 **Libraries (build into this project)** 下的对应项后，运行 `genconfig.sh`，再配置 CMake。
 
-## 与 Kconfig / `ember` 脚本的关系
+## 为何使用 ExternalProject（与 OpenEmber 的差异说明）
 
-1. 在仓库根目录执行 **`./scripts/ember menuconfig`**（或 **`OPENEMBER_KCONFIG_NONINTERACTIVE=1`** 生成默认 `.config`）。
-2. **`./scripts/ember genconfig`** 根据 `build/.config` 生成 **`build/config.cmake`**。
-3. **`cmake -S . -B build`** 会 **`include(build/config.cmake OPTIONAL)`**，从而应用 `OPENEMBER_THIRD_PARTY_MODE` 等开关。
+多个上游工程在同一顶层 `project()` 内 `add_subdirectory` 时，可能出现 **全局 CMake target 名称冲突**（例如 nng 与 lcm 都定义 `dist`）。EmberLite 对 **FETCH/VENDOR** 路径采用 **独立前缀的 ExternalProject + IMPORTED 静态库**，将各库安装到 `build/_deps-install/<name>/`，再通过 `emberlite::*` 的 `INTERFACE` 目标暴露给应用。
 
-推荐一站式命令：**`./scripts/ember build`**（在无 `.config` / `config.cmake` 时会自动生成默认配置并配置、编译）。
+OpenEmber 若同时启用多个同类依赖，也可能遇到同类限制；EmberLite 侧优先保证 **可同时启用 nng + lcm + zenoh-pico**。
 
-## `OPENEMBER_THIRD_PARTY_BUNDLE_*`（预留）
+## 本地源码覆盖
 
-`cmake/OpenEmberThirdPartyBundleDefaults.cmake` 会为若干 **`OPENEMBER_THIRD_PARTY_BUNDLE_<NAME>`** 提供默认布尔值（与 OpenEmber 一致），供将来接入 ZLOG、NNG 等 bundle 时使用。当前未连接具体 Fetch 逻辑时，这些变量仅存在于 CMake 缓存中，不影响链接产物。
+在 `cmake/Dependencies.cmake` 中可设置：
 
-## 与本机缓存目录
+- `OPENEMBER_NNG_LOCAL_SOURCE`
+- `OPENEMBER_LCM_LOCAL_SOURCE`
+- `OPENEMBER_ZENOHPICO_LOCAL_SOURCE`
 
-- **`third_party/`**：归档落库目录（可提交占位，见 `third_party/.gitkeep`）。
-- **`.kconfig-frontends/`**：`scripts/kconfig/ensure-kconfig-frontends-nox.sh` 自动下载的 kconfig 工具，**已加入 `.gitignore`**。
+## 升级
 
-## 参考
-
-- OpenEmber 上游文档与完整依赖链见本仓库内 **`openember/`**（若通过软链接或子模块引入）。
-- 构建入口与 Kconfig 流程见 **[构建说明（build.md）](./build.md)**。
+1. 修改 `cmake/Dependencies.cmake` 中的版本与 URL。
+2. 删除 `third_party/` 中对应旧归档（如有）并清理 `build/` 后重新配置。

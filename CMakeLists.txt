@@ -16,6 +16,16 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(${CMAKE_BINARY_DIR}/config.cmake OPTIONAL)
 include(cmake/Dependencies.cmake)
 
+if(NOT DEFINED OPENEMBER_ENABLE_NNG)
+    set(OPENEMBER_ENABLE_NNG OFF CACHE BOOL "Build and link nng")
+endif()
+if(NOT DEFINED OPENEMBER_ENABLE_LCM)
+    set(OPENEMBER_ENABLE_LCM OFF CACHE BOOL "Build and link lcm")
+endif()
+if(NOT DEFINED OPENEMBER_ENABLE_ZENOHPICO)
+    set(OPENEMBER_ENABLE_ZENOHPICO OFF CACHE BOOL "Build and link zenoh-pico")
+endif()
+
 # 未使用 ember/kconfig 时，与原先“全部子目录 + HAL 自动探测”行为一致
 if(NOT DEFINED OPENEMBER_ENABLE_HAL)
     set(OPENEMBER_ENABLE_HAL ON CACHE BOOL "Build platform HAL (emberlite_hal)")
@@ -41,6 +51,48 @@ endif()
 if(OPENEMBER_ENABLE_CRYPTO)
     add_subdirectory(components/crypto)
 endif()
+
+if(OPENEMBER_ENABLE_NNG)
+    openember_transport_resolve_nng()
+    if(NOT OPENEMBER_NNG_LIBRARIES)
+        message(FATAL_ERROR "nng: resolve produced empty OPENEMBER_NNG_LIBRARIES")
+    endif()
+    add_library(emberlite_nng INTERFACE)
+    target_link_libraries(emberlite_nng INTERFACE ${OPENEMBER_NNG_LIBRARIES})
+    target_include_directories(emberlite_nng INTERFACE ${OPENEMBER_NNG_INCLUDE_DIRS})
+    add_library(emberlite::nng ALIAS emberlite_nng)
+endif()
+
+if(OPENEMBER_ENABLE_LCM)
+    openember_transport_resolve_lcm()
+    if(NOT OPENEMBER_LCM_LIBRARIES)
+        message(FATAL_ERROR "lcm: resolve produced empty OPENEMBER_LCM_LIBRARIES")
+    endif()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(EMBERLITE_LCM_GLIB REQUIRED glib-2.0)
+    add_library(emberlite_lcm INTERFACE)
+    target_link_libraries(emberlite_lcm INTERFACE
+        ${OPENEMBER_LCM_LIBRARIES}
+        ${EMBERLITE_LCM_GLIB_LIBRARIES}
+    )
+    target_include_directories(emberlite_lcm INTERFACE
+        ${OPENEMBER_LCM_INCLUDE_DIRS}
+        ${EMBERLITE_LCM_GLIB_INCLUDE_DIRS}
+    )
+    add_library(emberlite::lcm ALIAS emberlite_lcm)
+endif()
+
+if(OPENEMBER_ENABLE_ZENOHPICO)
+    openember_transport_resolve_zenoh_pico()
+    if(NOT OPENEMBER_ZENOHPICO_LIBRARIES)
+        message(FATAL_ERROR "zenoh-pico: resolve produced empty OPENEMBER_ZENOHPICO_LIBRARIES")
+    endif()
+    add_library(emberlite_zenohpico INTERFACE)
+    target_link_libraries(emberlite_zenohpico INTERFACE ${OPENEMBER_ZENOHPICO_LIBRARIES})
+    target_include_directories(emberlite_zenohpico INTERFACE ${OPENEMBER_ZENOHPICO_INCLUDE_DIRS})
+    add_library(emberlite::zenohpico ALIAS emberlite_zenohpico)
+endif()
+
 if(OPENEMBER_ENABLE_EXAMPLES)
     if(NOT OPENEMBER_ENABLE_HAL)
         message(FATAL_ERROR
