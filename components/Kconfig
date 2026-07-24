@@ -4,6 +4,12 @@ config OPENEMBER_ENABLE_CRYPTO
   bool "Build ember_crypto (CRC/MD5/SHA256)"
   default y
 
+config OPENEMBER_ENABLE_LOGGING
+  bool "Build ember_logging (builtin stderr logger)"
+  default y
+  help
+    Lightweight C logging API (ember/log.h). No spdlog dependency.
+
 config OPENEMBER_ENABLE_PPOOL
   bool "Build ember_ppool (pthread thread pool)"
   default y
