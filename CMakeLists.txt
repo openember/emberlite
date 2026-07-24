@@ -31,6 +31,9 @@ endif()
 if(NOT DEFINED OPENEMBER_ENABLE_LIBYAML)
     set(OPENEMBER_ENABLE_LIBYAML OFF CACHE BOOL "Build and link libyaml")
 endif()
+if(NOT DEFINED OPENEMBER_ENABLE_MSGS)
+    set(OPENEMBER_ENABLE_MSGS ON CACHE BOOL "Build and link openember-msgs Nanopb C bindings")
+endif()
 
 # 未使用 ember/kconfig 时，与原先“全部子目录 + HAL 自动探测”行为一致
 if(NOT DEFINED OPENEMBER_ENABLE_HAL)
@@ -119,6 +122,13 @@ if(OPENEMBER_ENABLE_LIBYAML)
     target_link_libraries(emberlite_libyaml INTERFACE ${OPENEMBER_LIBYAML_LIBRARIES})
     target_include_directories(emberlite_libyaml INTERFACE ${OPENEMBER_LIBYAML_INCLUDE_DIRS})
     add_library(emberlite::libyaml ALIAS emberlite_libyaml)
+endif()
+
+if(OPENEMBER_ENABLE_MSGS)
+    openember_protocol_resolve_openember_msgs()
+    if(NOT OPENEMBER_MSGS_LIBRARIES)
+        message(FATAL_ERROR "openember-msgs: resolve produced empty OPENEMBER_MSGS_LIBRARIES")
+    endif()
 endif()
 
 if(OPENEMBER_ENABLE_EXAMPLES)

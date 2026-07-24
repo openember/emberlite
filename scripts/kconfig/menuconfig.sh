@@ -13,6 +13,7 @@ cp -f "${ROOT_DIR}/Kconfig" "${BUILD_DIR}/Kconfig"
 _layer_kconfigs=(
   "third_party/Kconfig"
   "platform/Kconfig"
+  "protocol/Kconfig"
   "components/Kconfig"
   "apps/Kconfig"
 )

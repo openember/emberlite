@@ -38,6 +38,19 @@ set(OPENEMBER_LIBYAML_URL
     "https://github.com/yaml/libyaml/archive/refs/tags/${OPENEMBER_LIBYAML_VERSION}.tar.gz"
     CACHE STRING "libyaml source archive URL")
 
+set(OPENEMBER_NANOPB_VERSION "0.4.9.1" CACHE STRING "nanopb version/tag")
+set(OPENEMBER_NANOPB_URL
+    "https://github.com/nanopb/nanopb/archive/refs/tags/${OPENEMBER_NANOPB_VERSION}.tar.gz"
+    CACHE STRING "nanopb source archive URL")
+
+set(OPENEMBER_MSGS_SOURCE "FETCH" CACHE STRING "openember-msgs source: FETCH or LOCAL")
+set_property(CACHE OPENEMBER_MSGS_SOURCE PROPERTY STRINGS FETCH LOCAL)
+set(OPENEMBER_MSGS_REF "main" CACHE STRING "openember-msgs git ref")
+set_property(CACHE OPENEMBER_MSGS_REF PROPERTY STRINGS main)
+set(OPENEMBER_MSGS_URL
+    "https://github.com/openember/openember-msgs/archive/refs/heads/${OPENEMBER_MSGS_REF}.tar.gz"
+    CACHE STRING "openember-msgs source archive URL")
+
 # 解压目录与 third_party 缓存文件名（与上游归档顶层目录一致）
 set(OPENEMBER_NNG_CACHE_KEY "nng-${OPENEMBER_NNG_VERSION}")
 set(OPENEMBER_NNG_STAGE_DIR_NAME "${OPENEMBER_NNG_CACHE_KEY}")
@@ -49,6 +62,10 @@ set(OPENEMBER_YYJSON_CACHE_KEY "yyjson-${OPENEMBER_YYJSON_VERSION}")
 set(OPENEMBER_YYJSON_STAGE_DIR_NAME "${OPENEMBER_YYJSON_CACHE_KEY}")
 set(OPENEMBER_LIBYAML_CACHE_KEY "libyaml-${OPENEMBER_LIBYAML_VERSION}")
 set(OPENEMBER_LIBYAML_STAGE_DIR_NAME "${OPENEMBER_LIBYAML_CACHE_KEY}")
+set(OPENEMBER_NANOPB_CACHE_KEY "nanopb-${OPENEMBER_NANOPB_VERSION}")
+set(OPENEMBER_NANOPB_STAGE_DIR_NAME "${OPENEMBER_NANOPB_CACHE_KEY}")
+set(OPENEMBER_MSGS_CACHE_KEY "openember-msgs-${OPENEMBER_MSGS_REF}")
+set(OPENEMBER_MSGS_STAGE_DIR_NAME "${OPENEMBER_MSGS_CACHE_KEY}")
 
 # 本地源码覆盖（FETCH/VENDOR 下可用）
 set(OPENEMBER_NNG_LOCAL_SOURCE "" CACHE PATH "Optional: pre-extracted nng tree")
@@ -56,12 +73,16 @@ set(OPENEMBER_LCM_LOCAL_SOURCE "" CACHE PATH "Optional: pre-extracted lcm tree")
 set(OPENEMBER_ZENOHPICO_LOCAL_SOURCE "" CACHE PATH "Optional: pre-extracted zenoh-pico tree")
 set(OPENEMBER_YYJSON_LOCAL_SOURCE "" CACHE PATH "Optional: pre-extracted yyjson tree")
 set(OPENEMBER_LIBYAML_LOCAL_SOURCE "" CACHE PATH "Optional: pre-extracted libyaml tree")
+set(OPENEMBER_NANOPB_LOCAL_SOURCE "" CACHE PATH "Optional: pre-extracted nanopb tree")
+set(OPENEMBER_MSGS_LOCAL_SOURCE "" CACHE PATH "Absolute path to local openember-msgs checkout")
+set(OPENEMBER_PROTOBUF_PYTHON "" CACHE FILEPATH "Optional: Python interpreter with google.protobuf for nanopb generation")
 
 include(${CMAKE_SOURCE_DIR}/cmake/GetNng.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/GetLcm.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/GetZenohPico.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/GetYyjson.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/GetLibyaml.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/GetOpenEmberMsgs.cmake)
 
 ################################################################################
 # Resolve helpers (FetchContent / Vendor / System)
@@ -194,4 +215,29 @@ function(openember_third_party_resolve_libyaml)
     openember_get_libyaml()
     set(OPENEMBER_LIBYAML_LIBRARIES ${OPENEMBER_LIBYAML_LIBRARIES} PARENT_SCOPE)
     set(OPENEMBER_LIBYAML_INCLUDE_DIRS ${OPENEMBER_LIBYAML_INCLUDE_DIRS} PARENT_SCOPE)
+endfunction()
+
+function(openember_protocol_resolve_openember_msgs)
+    if(OPENEMBER_THIRD_PARTY_MODE STREQUAL "SYSTEM" AND NOT (OPENEMBER_MSGS_SOURCE STREQUAL "LOCAL"))
+        message(FATAL_ERROR
+            "openember-msgs SYSTEM mode is not packaged yet. "
+            "Set OPENEMBER_MSGS_LOCAL_SOURCE or use FETCH/VENDOR.")
+    endif()
+
+    if(OPENEMBER_THIRD_PARTY_MODE STREQUAL "FETCH" OR OPENEMBER_THIRD_PARTY_MODE STREQUAL "VENDOR")
+        if(OPENEMBER_MSGS_SOURCE STREQUAL "FETCH" AND NOT OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS)
+            message(FATAL_ERROR
+                "OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS=OFF: provide openember-msgs "
+                "or set OPENEMBER_MSGS_SOURCE=LOCAL and OPENEMBER_MSGS_LOCAL_SOURCE.")
+        endif()
+        if(NOT OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB AND NOT OPENEMBER_NANOPB_LOCAL_SOURCE)
+            message(FATAL_ERROR
+                "OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB=OFF: provide nanopb "
+                "or set OPENEMBER_NANOPB_LOCAL_SOURCE.")
+        endif()
+    endif()
+
+    openember_get_openember_msgs()
+    set(OPENEMBER_MSGS_LIBRARIES ${OPENEMBER_MSGS_LIBRARIES} PARENT_SCOPE)
+    set(OPENEMBER_MSGS_INCLUDE_DIRS ${OPENEMBER_MSGS_INCLUDE_DIRS} PARENT_SCOPE)
 endfunction()

@@ -50,7 +50,30 @@ config OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML
   help
     When enabled, FETCH/VENDOR mode can download/extract and build libyaml from source archives.
 
+config OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB
+  bool "Bundle: nanopb"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract and build Nanopb from source archives.
+
+config OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS
+  bool "Bundle: openember-msgs"
+  default y
+  help
+    When enabled, FETCH/VENDOR mode can download/extract shared OpenEmber protocol definitions.
+
 endmenu
+
+# Hidden linkers: force source bundles ON when the matching feature is active.
+config OPENEMBER_TP_LINK_OPENEMBER_MSGS
+  bool
+  default y if OPENEMBER_ENABLE_MSGS
+  select OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS
+
+config OPENEMBER_TP_LINK_NANOPB
+  bool
+  default y if OPENEMBER_ENABLE_MSGS
+  select OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB
 
 menu "Libraries (build into this project)"
 

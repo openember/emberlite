@@ -77,12 +77,46 @@ if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML" "${CONFIG_FILE}"; the
 else
   bundle_libyaml="$(onoff CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML)"
 fi
+if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB" "${CONFIG_FILE}"; then
+  bundle_nanopb=ON
+else
+  bundle_nanopb="$(onoff CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB)"
+fi
+if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS" "${CONFIG_FILE}"; then
+  bundle_openember_msgs=ON
+else
+  bundle_openember_msgs="$(onoff CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS)"
+fi
 
 enable_nng="$(onoff CONFIG_OPENEMBER_ENABLE_NNG)"
 enable_lcm="$(onoff CONFIG_OPENEMBER_ENABLE_LCM)"
 enable_zenohpico="$(onoff CONFIG_OPENEMBER_ENABLE_ZENOHPICO)"
 enable_yyjson="$(onoff CONFIG_OPENEMBER_ENABLE_YYJSON)"
 enable_libyaml="$(onoff CONFIG_OPENEMBER_ENABLE_LIBYAML)"
+enable_msgs="$(onoff CONFIG_OPENEMBER_ENABLE_MSGS)"
+if ! grep -q "^CONFIG_OPENEMBER_ENABLE_MSGS=" "${CONFIG_FILE}"; then
+  enable_msgs=ON
+fi
+msgs_ref="$(awk '
+  BEGIN { r="main" }
+  /^CONFIG_OPENEMBER_MSGS_REF_LATEST=y/ { r="main" }
+  END { print r }
+' "${CONFIG_FILE}")"
+msgs_source="$(awk '
+  BEGIN { s="FETCH" }
+  /^CONFIG_OPENEMBER_MSGS_SOURCE_LOCAL=y/ { s="LOCAL" }
+  /^CONFIG_OPENEMBER_MSGS_SOURCE_FETCH=y/ { s="FETCH" }
+  END { print s }
+' "${CONFIG_FILE}")"
+msgs_local_source="$(awk '
+  /^CONFIG_OPENEMBER_MSGS_LOCAL_SOURCE=/ {
+    v=$0
+    sub(/^CONFIG_OPENEMBER_MSGS_LOCAL_SOURCE=/,"",v)
+    gsub(/^"/,"",v); gsub(/"$/,"",v)
+    print v
+    exit
+  }
+' "${CONFIG_FILE}")"
 
 OUT="${BUILD_DIR}/config.cmake"
 mkdir -p "$(dirname "${OUT}")"
@@ -96,11 +130,19 @@ mkdir -p "$(dirname "${OUT}")"
   echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_ZENOHPICO ${bundle_zenohpico} CACHE BOOL \"Bundle: zenoh-pico\" FORCE)"
   echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_YYJSON ${bundle_yyjson} CACHE BOOL \"Bundle: yyjson\" FORCE)"
   echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_LIBYAML ${bundle_libyaml} CACHE BOOL \"Bundle: libyaml\" FORCE)"
+  echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_NANOPB ${bundle_nanopb} CACHE BOOL \"Bundle: nanopb\" FORCE)"
+  echo "set(OPENEMBER_THIRD_PARTY_BUNDLE_OPENEMBER_MSGS ${bundle_openember_msgs} CACHE BOOL \"Bundle: openember-msgs\" FORCE)"
   echo "set(OPENEMBER_ENABLE_NNG ${enable_nng} CACHE BOOL \"Build and link nng\" FORCE)"
   echo "set(OPENEMBER_ENABLE_LCM ${enable_lcm} CACHE BOOL \"Build and link lcm\" FORCE)"
   echo "set(OPENEMBER_ENABLE_ZENOHPICO ${enable_zenohpico} CACHE BOOL \"Build and link zenoh-pico\" FORCE)"
   echo "set(OPENEMBER_ENABLE_YYJSON ${enable_yyjson} CACHE BOOL \"Build and link yyjson\" FORCE)"
   echo "set(OPENEMBER_ENABLE_LIBYAML ${enable_libyaml} CACHE BOOL \"Build and link libyaml\" FORCE)"
+  echo "set(OPENEMBER_ENABLE_MSGS ${enable_msgs} CACHE BOOL \"Build and link openember-msgs Nanopb C bindings\" FORCE)"
+  echo "set(OPENEMBER_MSGS_SOURCE \"${msgs_source}\" CACHE STRING \"openember-msgs source: FETCH or LOCAL\" FORCE)"
+  echo "set_property(CACHE OPENEMBER_MSGS_SOURCE PROPERTY STRINGS FETCH LOCAL)"
+  echo "set(OPENEMBER_MSGS_REF \"${msgs_ref}\" CACHE STRING \"openember-msgs git ref\" FORCE)"
+  echo "set_property(CACHE OPENEMBER_MSGS_REF PROPERTY STRINGS main)"
+  echo "set(OPENEMBER_MSGS_LOCAL_SOURCE \"${msgs_local_source}\" CACHE PATH \"Absolute path to local openember-msgs checkout\" FORCE)"
   if [[ "${hal_enabled}" == ON ]]; then
     echo "set(OPENEMBER_ENABLE_HAL ON CACHE BOOL \"Build platform HAL (emberlite_hal)\" FORCE)"
     echo "set(OPENEMBER_HAL_ALSA \"${hal_alsa}\" CACHE STRING \"HAL ALSA: AUTO|ON|OFF\" FORCE)"
