@@ -10,6 +10,20 @@ config OPENEMBER_ENABLE_LOGGING
   help
     Lightweight C logging API (ember/log.h). No spdlog dependency.
 
+config OPENEMBER_ENABLE_COMMON
+  bool "Build ember_common (hello/random/time helpers)"
+  default y
+  help
+    Small C utility helpers migrated from OpenEmber components/Common.
+
+config OPENEMBER_ENABLE_NETDEV
+  bool "Build ember_netdev (Linux net interface helpers)"
+  default y
+  depends on OPENEMBER_ENABLE_LOGGING
+  help
+    C API for MAC/IP/netmask/gateway/DNS/link status via ioctl/ethtool
+    (migrated from OpenEmber components/Common/netdev).
+
 config OPENEMBER_ENABLE_PPOOL
   bool "Build ember_ppool (pthread thread pool)"
   default y
