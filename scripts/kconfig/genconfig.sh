@@ -28,6 +28,15 @@ onoff() {
   fi
 }
 
+onoff_default_on() {
+  local sym="$1"
+  if grep -q "^${sym}=" "${CONFIG_FILE}"; then
+    onoff "${sym}"
+  else
+    echo ON
+  fi
+}
+
 # 旧 .config 无 HAL 开关时保持与迁移前一致（默认启用 HAL）
 if ! grep -q "CONFIG_OPENEMBER_ENABLE_HAL" "${CONFIG_FILE}"; then
   hal_enabled=ON
@@ -49,8 +58,13 @@ hal_libusb="$(awk '
   END { print v }
 ' "${CONFIG_FILE}")"
 
-examples_enabled="$(onoff CONFIG_OPENEMBER_ENABLE_EXAMPLES)"
-crypto_enabled="$(onoff CONFIG_OPENEMBER_ENABLE_CRYPTO)"
+examples_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_EXAMPLES)"
+crypto_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_CRYPTO)"
+logging_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_LOGGING)"
+common_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_COMMON)"
+runtime_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_RUNTIME)"
+netdev_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_NETDEV)"
+ppool_enabled="$(onoff_default_on CONFIG_OPENEMBER_ENABLE_PPOOL)"
 
 if ! grep -q "CONFIG_OPENEMBER_THIRD_PARTY_BUNDLE_NNG" "${CONFIG_FILE}"; then
   bundle_nng=ON
@@ -165,6 +179,31 @@ mkdir -p "$(dirname "${OUT}")"
     echo "set(OPENEMBER_ENABLE_CRYPTO ON CACHE BOOL \"Build components/crypto\" FORCE)"
   else
     echo "set(OPENEMBER_ENABLE_CRYPTO OFF CACHE BOOL \"Build components/crypto\" FORCE)"
+  fi
+  if [[ "${logging_enabled}" == ON ]]; then
+    echo "set(OPENEMBER_ENABLE_LOGGING ON CACHE BOOL \"Build components/logging\" FORCE)"
+  else
+    echo "set(OPENEMBER_ENABLE_LOGGING OFF CACHE BOOL \"Build components/logging\" FORCE)"
+  fi
+  if [[ "${common_enabled}" == ON ]]; then
+    echo "set(OPENEMBER_ENABLE_COMMON ON CACHE BOOL \"Build components/common\" FORCE)"
+  else
+    echo "set(OPENEMBER_ENABLE_COMMON OFF CACHE BOOL \"Build components/common\" FORCE)"
+  fi
+  if [[ "${runtime_enabled}" == ON ]]; then
+    echo "set(OPENEMBER_ENABLE_RUNTIME ON CACHE BOOL \"Build core/runtime\" FORCE)"
+  else
+    echo "set(OPENEMBER_ENABLE_RUNTIME OFF CACHE BOOL \"Build core/runtime\" FORCE)"
+  fi
+  if [[ "${netdev_enabled}" == ON ]]; then
+    echo "set(OPENEMBER_ENABLE_NETDEV ON CACHE BOOL \"Build components/netdev\" FORCE)"
+  else
+    echo "set(OPENEMBER_ENABLE_NETDEV OFF CACHE BOOL \"Build components/netdev\" FORCE)"
+  fi
+  if [[ "${ppool_enabled}" == ON ]]; then
+    echo "set(OPENEMBER_ENABLE_PPOOL ON CACHE BOOL \"Build components/ppool\" FORCE)"
+  else
+    echo "set(OPENEMBER_ENABLE_PPOOL OFF CACHE BOOL \"Build components/ppool\" FORCE)"
   fi
 } > "${OUT}"
 

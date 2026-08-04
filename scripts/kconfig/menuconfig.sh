@@ -14,6 +14,7 @@ _layer_kconfigs=(
   "third_party/Kconfig"
   "platform/Kconfig"
   "protocol/Kconfig"
+  "core/Kconfig"
   "components/Kconfig"
   "apps/Kconfig"
 )

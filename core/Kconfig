@@ -1,0 +1,11 @@
+menu "Core"
+
+config OPENEMBER_ENABLE_RUNTIME
+  bool "Build ember_runtime (FSM/node registry)"
+  default y
+  help
+    Core runtime helpers for embedded products: a table-driven finite state
+    machine and a fixed-capacity node registry. The implementation does not
+    allocate memory internally.
+
+endmenu

@@ -1,4 +1,5 @@
 build*/
+.cache/
 
 # Kconfig frontends cache (downloaded by scripts/kconfig/ensure-kconfig-frontends-nox.sh)
 .kconfig-frontends/

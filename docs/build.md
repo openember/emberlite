@@ -51,6 +51,13 @@ cmake --build build -j
 - 可执行文件：`build/bin/`
 - 静态/动态库：`build/lib/`
 
+## 常用组件
+
+- `OPENEMBER_ENABLE_RUNTIME`：构建 `core/runtime` 的 `ember_runtime`，包含轻量 FSM 和固定容量节点注册表，默认开启。
+- `OPENEMBER_ENABLE_COMMON`：构建 `ember_common`。
+- `OPENEMBER_ENABLE_CRYPTO`：构建 `ember_crypto`。
+- `OPENEMBER_ENABLE_LOGGING`：构建 `ember_logging`。
+
 ## 运行示例：串口终端（picocom-like）
 
 示例程序名：`hal_uart_term`
@@ -79,4 +86,3 @@ sudo usermod -aG dialout $USER
 ```
 
 重新登录后生效。
-
